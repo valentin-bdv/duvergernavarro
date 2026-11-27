@@ -383,6 +383,16 @@
     catch { btn.textContent = MAIL; }
   });
 
+  let snapHoldUntil = 0; // suspend l'aide au défilement pendant un défilement programmé
+  /* Défilement déclenché par le site (aide au défilement, bouton « Devis ») :
+     autoScrolling reste vrai jusqu'à ce que la page soit immobile, pour que la
+     barre du bas ne réagisse qu'aux gestes de l'utilisateur. */
+  let autoScrolling = false, autoEnd = null;
+  const endAutoSoon = (ms) => { clearTimeout(autoEnd); autoEnd = setTimeout(() => (autoScrolling = false), ms); };
+  const autoScroll = (top) => { autoScrolling = true; endAutoSoon(400); scrollTo({ top, behavior: "smooth" }); };
+  addEventListener("scroll", () => autoScrolling && endAutoSoon(150), { passive: true });
+  addEventListener("touchstart", () => { autoScrolling = false; clearTimeout(autoEnd); }, { passive: true });
+
   /* ---------- Formulaire repliable (téléphone) ----------
      Sur téléphone, la demande de devis est repliée sous son titre. Les liens
      « Devis » / « Demander un devis » (#contact) l'ouvrent automatiquement. */
@@ -396,8 +406,37 @@
     };
     toggle.addEventListener("click", () => phoneForm.matches && setOpen(!formCard.classList.contains("open")));
     $$('a[href="#contact"]').forEach((a) => a.addEventListener("click", () => setOpen(true)));
+    // « Devis » de la barre du bas : on va droit au formulaire, titre calé sous le header
+    $('.callbar a[href="#contact"]')?.addEventListener("click", (e) => {
+      if (!phoneForm.matches) return;
+      e.preventDefault();
+      // apparition terminée d'office : son décalage (translateY) fausserait la mesure
+      formCard.style.transition = "none";
+      formCard.classList.add("in");
+      const top = formCard.getBoundingClientRect().top + scrollY - header.offsetHeight - 12;
+      formCard.style.transition = "";
+      snapHoldUntil = Date.now() + 1500; // l'aide au défilement ne doit pas recaler ailleurs
+      autoScroll(top);
+    });
     phoneForm.addEventListener("change", () => setOpen(formCard.classList.contains("open")));
     setOpen(false);
+  }
+
+  /* ---------- Barre « Appeler / Devis » (téléphone) ----------
+     Elle s'efface quand on descend et ne revient que si l'utilisateur remonte
+     lui-même : les défilements automatiques (aide au défilement, « Devis ») ne
+     la font pas réapparaître. */
+  const callbar = $(".callbar");
+  if (callbar) {
+    let lastY = scrollY;
+    addEventListener("scroll", () => {
+      const y = scrollY, d = y - lastY; // y peut être négatif (rebond iOS en haut de page)
+      if (autoScrolling) { lastY = y; return; }
+      if (Math.abs(d) < 6) return; // ignore les micro-mouvements
+      if (d > 0 && y > 80) callbar.classList.add("is-hidden");
+      else if (d < 0) callbar.classList.remove("is-hidden");
+      lastY = y;
+    }, { passive: true });
   }
 
   /* ---------- Aide au défilement (téléphone) ----------
@@ -409,6 +448,7 @@
   if (snapTargets.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     let touching = false, idle = null, snapping = false;
     const settle = () => {
+      if (Date.now() < snapHoldUntil) return;
       if (!phoneSnap.matches || touching || document.body.classList.contains("menu-open")) return;
       if (snapping) { snapping = false; return; } // fin de notre propre défilement
       const head = header.offsetHeight;
@@ -420,7 +460,7 @@
         // on cale son bas sur le haut de la barre « Appeler / Devis »
         const ref = el.querySelector("[data-snap]");
         const r = el.getBoundingClientRect();
-        const bar = $(".callbar")?.offsetHeight || 0;
+        const bar = $(".callbar:not(.is-hidden)")?.offsetHeight || 0;
         const fitsEnd = el.hasAttribute("data-snap-end") && r.height <= innerHeight - head - bar + 60;
         const top = fitsEnd ? r.bottom + scrollY - (innerHeight - bar) + head
           : (ref || el).getBoundingClientRect().top + scrollY - (ref ? 14 : 0);
@@ -428,12 +468,33 @@
         const d = y - scrollY;
         if (Math.abs(d) > 2 && Math.abs(d) < innerHeight * 0.2 && (!best || Math.abs(d) < Math.abs(best.d))) best = { y, d };
       });
-      if (best) { snapping = true; scrollTo({ top: best.y, behavior: "smooth" }); }
+      if (best) { snapping = true; autoScroll(best.y); }
     };
     const later = () => { clearTimeout(idle); idle = setTimeout(settle, 140); };
     addEventListener("touchstart", () => { touching = true; snapping = false; clearTimeout(idle); }, { passive: true });
     addEventListener("touchend", () => { touching = false; later(); }, { passive: true });
     addEventListener("scroll", later, { passive: true });
+  }
+
+  /* ---------- Mentions légales : rubrique active dans les puces (téléphone) ----------
+     La puce noire suit la rubrique lue ; la rangée défile pour la garder visible. */
+  const chips = $(".legal-chips");
+  if (chips) {
+    const links = $$("a", chips);
+    const cards = links.map((a) => $(a.getAttribute("href")));
+    let current = 0;
+    const spyChips = () => {
+      const line = chips.getBoundingClientRect().bottom + 24;
+      let k = 0;
+      cards.forEach((c, i) => { if (c && c.getBoundingClientRect().top <= line) k = i; });
+      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) k = cards.length - 1; // bas de page
+      if (k === current) return;
+      current = k;
+      links.forEach((a, i) => a.classList.toggle("is-active", i === k));
+      chips.scrollTo({ left: links[k].offsetLeft - 16, behavior: "smooth" });
+    };
+    addEventListener("scroll", spyChips, { passive: true });
+    spyChips();
   }
 
   /* ---------- Année du footer ---------- */
