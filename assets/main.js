@@ -428,10 +428,13 @@
      la font pas réapparaître. */
   const callbar = $(".callbar");
   if (callbar) {
-    let lastY = scrollY;
+    // Au chargement, Safari peut défiler seul (position restaurée, barre d'adresse) :
+    // la barre ne réagit qu'une fois que l'utilisateur a touché l'écran.
+    let lastY = scrollY, touched = false;
+    ["touchstart", "wheel", "keydown"].forEach((t) => addEventListener(t, () => (touched = true), { once: true, passive: true }));
     addEventListener("scroll", () => {
       const y = scrollY, d = y - lastY; // y peut être négatif (rebond iOS en haut de page)
-      if (autoScrolling) { lastY = y; return; }
+      if (autoScrolling || !touched) { lastY = y; return; }
       if (Math.abs(d) < 6) return; // ignore les micro-mouvements
       if (d > 0 && y > 80) callbar.classList.add("is-hidden");
       else if (d < 0) callbar.classList.remove("is-hidden");
