@@ -423,13 +423,14 @@
   }
 
   /* ---------- Barre « Appeler / Devis » (téléphone) ----------
-     Elle s'efface quand on descend et ne revient que si l'utilisateur remonte
+     Absente au chargement, elle s'efface quand on descend et n'apparaît que si l'utilisateur remonte
      lui-même : les défilements automatiques (aide au défilement, « Devis ») ne
      la font pas réapparaître. */
   const callbar = $(".callbar");
   if (callbar) {
-    // Au chargement, Safari peut défiler seul (position restaurée, barre d'adresse) :
-    // la barre ne réagit qu'une fois que l'utilisateur a touché l'écran.
+    // Cachée au chargement (classe dans le HTML) : elle n'apparaît qu'au premier geste
+    // vers le haut. Les défilements faits seuls par Safari au chargement (position
+    // restaurée, barre d'adresse) sont ignorés tant que l'utilisateur n'a pas touché l'écran.
     let lastY = scrollY, touched = false;
     ["touchstart", "wheel", "keydown"].forEach((t) => addEventListener(t, () => (touched = true), { once: true, passive: true }));
     addEventListener("scroll", () => {
