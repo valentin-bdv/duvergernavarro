@@ -675,7 +675,8 @@ body:not(.menu-open) .header:not(.scrolled) .burger { border-color: var(--ink); 
   }
   .callbar a { justify-content: center; padding: .75em 1em; }
   .callbar { transition: transform .3s cubic-bezier(.2,.7,.2,1); }
-  .callbar.is-hidden { transform: translateY(100%); }
+  /* masquée pour de bon : hors champ (même sous la barre translucide de Safari) puis invisible */
+  .callbar.is-hidden { transform: translateY(calc(100% + 40px)); visibility: hidden; transition: transform .3s cubic-bezier(.2,.7,.2,1), visibility 0s .3s; }
 
   /* mentions légales (ML3) : bandeau dessiné, ancres défilantes, une carte par rubrique */
   .legal { padding: 64px 0 36px; }

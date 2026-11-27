@@ -455,15 +455,19 @@
       const maxY = document.documentElement.scrollHeight - innerHeight;
       let best = null;
       snapTargets.forEach((el) => {
-        // [data-snap] : point de calage plus précis dans la section (ex. le surtitre « L'entreprise »)
+        // [data-snap] : point de calage plus précis dans la section (ex. le surtitre « L'entreprise ») ;
+        // sa valeur éventuelle donne l'écart sous le header (14 px par défaut)
         // [data-snap-end] : tant que la section tient presque à l'écran (Contact, formulaire replié),
         // on cale son bas sur le haut de la barre « Appeler / Devis »
         const ref = el.querySelector("[data-snap]");
         const r = el.getBoundingClientRect();
         const bar = $(".callbar:not(.is-hidden)")?.offsetHeight || 0;
         const fitsEnd = el.hasAttribute("data-snap-end") && r.height <= innerHeight - head - bar + 60;
+        // position du repère sans le décalage de son apparition (.reveal en cours)
+        const shift = ref?.closest(".reveal") ? new DOMMatrix(getComputedStyle(ref.closest(".reveal")).transform).m42 : 0;
         const top = fitsEnd ? r.bottom + scrollY - (innerHeight - bar) + head
-          : (ref || el).getBoundingClientRect().top + scrollY - (ref ? 14 : 0);
+          : ref ? ref.getBoundingClientRect().top - shift + scrollY - (Number(ref.dataset.snap) || 14)
+          : r.top + scrollY;
         const y = Math.min(maxY, Math.max(0, top - (el.classList.contains("hero") ? 0 : head)));
         const d = y - scrollY;
         if (Math.abs(d) > 2 && Math.abs(d) < innerHeight * 0.2 && (!best || Math.abs(d) < Math.abs(best.d))) best = { y, d };
