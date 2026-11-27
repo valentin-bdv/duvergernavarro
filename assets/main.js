@@ -65,6 +65,18 @@
   onScroll();
   window.addEventListener("scroll", onScroll, { passive: true });
 
+  /* ---------- Section active dans la navigation ---------- */
+  const navLinks = $$(".nav > a[href^='#']");
+  const spy = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (!e.isIntersecting) return;
+      navLinks.forEach((a) => a.classList.toggle("is-active", a.getAttribute("href") === `#${(e.target.id ? e.target : e.target.querySelector(".anchor[id]")).id}`));
+    });
+  }, { rootMargin: "-45% 0px -50% 0px" });
+  navLinks.forEach((a) => { const t = $(a.getAttribute("href")); t && spy.observe(t.closest("section") ?? t); });
+  $(".hero") && new IntersectionObserver(([e]) => e.isIntersecting && navLinks.forEach((a) => a.classList.remove("is-active")))
+    .observe($(".hero"));
+
   /* ---------- Menu mobile (tiroir à droite) ---------- */
   const burger = $(".burger");
   const setMenu = (open) => {
@@ -76,6 +88,17 @@
   $(".nav-backdrop")?.addEventListener("click", () => setMenu(false));
   $$(".nav a").forEach((a) => a.addEventListener("click", () => setMenu(false)));
   document.addEventListener("keydown", (e) => e.key === "Escape" && setMenu(false));
+
+  /* ---------- Accueil mobile : le mot qui change ---------- */
+  const rot = $$(".hl-rot > span");
+  if (rot.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    let i = 0;
+    setInterval(() => {
+      rot[i].classList.remove("on");
+      i = (i + 1) % rot.length;
+      rot[i].classList.add("on");
+    }, 2200);
+  }
 
   /* ---------- Apparition au scroll ---------- */
   if ("IntersectionObserver" in window) {
@@ -133,6 +156,20 @@
       if (reduce) { pos = target; render(); return; }
       if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
     }
+    // points (affichés sur téléphone) : un par service, cliquables
+    const dots = slides.map((s, k) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.setAttribute("aria-label", s.getAttribute("aria-label"));
+      b.innerHTML = "<i></i>";
+      b.addEventListener("click", () => {
+        let d = mod(k - Math.round(target));
+        if (d > n / 2) d -= n;
+        if (d) manualTo(Math.round(target) + d);
+      });
+      $(".svc-dots", svc)?.appendChild(b);
+      return b;
+    });
     function setActive() {
       const a = mod(Math.round(target));
       slides.forEach((s, k) => {
@@ -140,6 +177,7 @@
         s.classList.toggle("is-active", on);
         s.setAttribute("aria-hidden", String(!on));
         s.inert = !on;
+        dots[k].setAttribute("aria-current", String(on));
       });
     }
 
@@ -344,6 +382,59 @@
     try { await navigator.clipboard.writeText(MAIL); btn.textContent = "Adresse copiée ✓"; }
     catch { btn.textContent = MAIL; }
   });
+
+  /* ---------- Formulaire repliable (téléphone) ----------
+     Sur téléphone, la demande de devis est repliée sous son titre. Les liens
+     « Devis » / « Demander un devis » (#contact) l'ouvrent automatiquement. */
+  const formCard = $(".form"), toggle = $(".form-toggle"), fold = $("#form-fold");
+  if (formCard && toggle && fold) {
+    const phoneForm = matchMedia("(max-width: 700px)");
+    const setOpen = (open) => {
+      formCard.classList.toggle("open", open);
+      toggle.setAttribute("aria-expanded", String(open));
+      fold.inert = phoneForm.matches && !open;
+    };
+    toggle.addEventListener("click", () => phoneForm.matches && setOpen(!formCard.classList.contains("open")));
+    $$('a[href="#contact"]').forEach((a) => a.addEventListener("click", () => setOpen(true)));
+    phoneForm.addEventListener("change", () => setOpen(formCard.classList.contains("open")));
+    setOpen(false);
+  }
+
+  /* ---------- Aide au défilement (téléphone) ----------
+     Quand le doigt lâche l'écran près du début d'une section (moins de 20 % de
+     la hauteur d'écran), la page termine le geste et cale la section sous le
+     header. Plus loin, on ne touche à rien : la lecture reste libre. */
+  const phoneSnap = matchMedia("(max-width: 700px)");
+  const snapTargets = $$(".hero, main > .section, .footer");
+  if (snapTargets.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    let touching = false, idle = null, snapping = false;
+    const settle = () => {
+      if (!phoneSnap.matches || touching || document.body.classList.contains("menu-open")) return;
+      if (snapping) { snapping = false; return; } // fin de notre propre défilement
+      const head = header.offsetHeight;
+      const maxY = document.documentElement.scrollHeight - innerHeight;
+      let best = null;
+      snapTargets.forEach((el) => {
+        // [data-snap] : point de calage plus précis dans la section (ex. le surtitre « L'entreprise »)
+        // [data-snap-end] : tant que la section tient presque à l'écran (Contact, formulaire replié),
+        // on cale son bas sur le haut de la barre « Appeler / Devis »
+        const ref = el.querySelector("[data-snap]");
+        const r = el.getBoundingClientRect();
+        const bar = $(".callbar")?.offsetHeight || 0;
+        const fitsEnd = el.hasAttribute("data-snap-end") && r.height <= innerHeight - head - bar + 60;
+        const top = fitsEnd ? r.bottom + scrollY - (innerHeight - bar) + head
+          : (ref || el).getBoundingClientRect().top + scrollY - (ref ? 14 : 0);
+        const y = Math.min(maxY, Math.max(0, top - (el.classList.contains("hero") ? 0 : head)));
+        const d = y - scrollY;
+        if (Math.abs(d) > 2 && Math.abs(d) < innerHeight * 0.2 && (!best || Math.abs(d) < Math.abs(best.d))) best = { y, d };
+      });
+      if (best) { snapping = true; scrollTo({ top: best.y, behavior: "smooth" }); }
+    };
+    const later = () => { clearTimeout(idle); idle = setTimeout(settle, 140); };
+    addEventListener("touchstart", () => { touching = true; snapping = false; clearTimeout(idle); }, { passive: true });
+    addEventListener("touchend", () => { touching = false; later(); }, { passive: true });
+    addEventListener("scroll", later, { passive: true });
+  }
 
   /* ---------- Année du footer ---------- */
   $$("[data-year]").forEach((el) => (el.textContent = new Date().getFullYear()));
